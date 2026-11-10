@@ -1,0 +1,18 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "com.github.antiphase",
+        "Name": "Antiphase",
+        "Description": "Control your Sony headphones — battery, noise cancelling, equalizer and more, directly from the system tray.",
+        "Version": "0.1.0",
+        "Authors": [
+            { "Name": "Shy_Doge" }
+        ],
+        "Icon": "audio-headset-bluetooth",
+        "License": "MIT",
+        "Website": "https://github.com/shy-doge/antiphase"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-NotificationArea": true
+}
