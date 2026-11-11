@@ -122,12 +122,15 @@ cd antiphase
 ./install.sh
 ```
 
-The script checks dependencies, installs the widget, registers the daemon
-to start on login, and starts it right away. Re-run it any time to update
-(`git pull && ./install.sh`).
+The script checks dependencies, installs the widget, copies the daemon
+backend to `~/.local/share/antiphase/backend`, registers it as a systemd
+user service (`antiphase.service`, auto-restart on crash; autostart entry
+on systems without a systemd user instance) and starts it right away.
+Re-run it any time to update (`git pull && ./install.sh`).
 
-> The autostart entry points into this checkout, so keep the folder where
-> it is — or move it first, then re-run `install.sh`.
+> The repo is pure source: after installing you can rename, move or even
+> delete the checkout without breaking the daemon. Just re-run `install.sh`
+> after changing the backend code.
 
 Then add the widget to the panel:
 
@@ -142,21 +145,32 @@ saved scenes).
 <details>
 <summary>Step by step, if you prefer doing it yourself</summary>
 
-**1. Start the daemon** (required — the widget talks to it over loopback):
+**1. Install and start the daemon** (required — the widget talks to it
+over loopback). Copy the backend somewhere stable so the checkout can be
+moved later:
 
 ```bash
-python3 contents/backend/daemon.py &
+mkdir -p ~/.local/share/antiphase/backend
+cp contents/backend/*.py ~/.local/share/antiphase/backend/
+python3 ~/.local/share/antiphase/backend/daemon.py &
 ```
 
-For autostart, create `~/.config/autostart/antiphase.desktop`:
+For autostart, create `~/.config/systemd/user/antiphase.service`:
 
 ```ini
-[Desktop Entry]
-Type=Application
-Name=Antiphase daemon
-Exec=python3 /path/to/antiphase/contents/backend/daemon.py
-X-KDE-autostart-after=panel
+[Unit]
+Description=Antiphase Sony headphone daemon
+
+[Service]
+ExecStart=python3 ~/.local/share/antiphase/backend/daemon.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
 ```
+
+then `systemctl --user daemon-reload && systemctl --user enable --now antiphase.service`.
 
 **2. Install the plasmoid:**
 
