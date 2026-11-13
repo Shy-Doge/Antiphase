@@ -943,6 +943,13 @@ class DaemonRPCHandler:
             return 0
         return ctrl.get_auto_power_off()
 
+    def handle_get_capabilities(self, params):
+        address = params.get("address")
+        ctrl = self._controllers.get(address)
+        if not ctrl or not ctrl.connected:
+            return {"error": "Not connected"}
+        return ctrl.get_capabilities()
+
     def handle_power_off(self, params):
         address = params.get("address")
         ctrl = self._controllers.get(address)

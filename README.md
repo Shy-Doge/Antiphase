@@ -19,7 +19,7 @@ Built as a Plasma 6 plasmoid (QML frontend + Python backend).
 | | |
 |:---:|:---:|
 | <img src="img/picker.png" alt="Antiphase wide tray cell and device list popup" width="400"> | <img src="img/xh1000xm6.png" alt="Antiphase device detail view for the WH-1000XM6" width="260"> |
-| **Tray & device list** — the wide tray cell shows model, codec, noise mode and battery at a glance; the popup lists paired Sony headphones with live status. | **Device detail** — noise-control tiles, ASC scenes, equalizer and DSEE, with the pinned power / refresh / Bluetooth bar. |
+| **Tray & device list** — the wide tray cell shows model, codec, noise mode and battery at a glance; the popup lists paired Sony headphones with live status. | **Device detail** — noise-control tiles, Adaptive Sound Control scenes, equalizer and DSEE, with a Settings page (Speak to Chat, Auto Power-Off, firmware) behind the gear and the pinned power / refresh / Bluetooth bar. |
 
 ## Features
 
@@ -31,19 +31,16 @@ Built as a Plasma 6 plasmoid (QML frontend + Python backend).
 | **ASC Scenes** | Editable Focus / Office / Aware presets (persisted by the daemon) |
 | **Equalizer** | Presets + custom curve: 10-band editor on MDR (XM6), 5-band + Clear Bass on V1/V2 |
 | **DSEE** | Enable/disable Sony audio upscaling |
+| **Settings page** | Speak to Chat, Adaptive Volume and Auto Power-Off on the device itself, plus an About section with the firmware version — rows appear per model capability |
 | **Codec** | Shows the active codec (LDAC / AAC / SBC) |
-| **Device Detection** | Auto-discovers paired Sony headphones via BlueZ |
+| **Device Detection** | Auto-discovers paired Sony headphones via BlueZ; Connect buttons on the list and detail page, with automatic session re-establishment |
 | **Tray Layouts** | Icon, icon + battery %, or product render + name + status; auto-sizing |
-
-> The daemon additionally exposes Speak-to-Chat, Adaptive Volume, Auto
-> Power-Off and firmware-version methods over JSON-RPC; the widget UI does
-> not surface them yet.
 
 ## Supported Devices
 
 | Device | Protocol | Status |
 |---|---|---|
-| WH-1000XM6 | MDR (COMMAND_1) | ✅ Verified on real hardware (battery, noise control, EQ, DSEE, codec, ASC scenes) |
+| WH-1000XM6 | MDR (COMMAND_1) | ✅ Verified on real hardware (battery, noise control, EQ, DSEE, codec, ASC scenes, Speak to Chat, Auto Power-Off, firmware) |
 | WH-1000XM3 | V1 | 🧪 Implemented, untested |
 | WH-1000XM4 | V1 | 🧪 Implemented, untested |
 | WH-1000XM5 | V2 | 🧪 Implemented, untested |
@@ -62,7 +59,7 @@ Built as a Plasma 6 plasmoid (QML frontend + Python backend).
 flowchart TD
     subgraph plasma["Plasma 6 System Tray"]
         icon["Antiphase tray icon"]
-        popup["<b>Popup flyout (QML)</b><br/>Device picker · Battery display<br/>Noise control tiles · EQ presets<br/>Connect / Disconnect"]
+        popup["<b>Popup flyout (QML)</b><br/>Device picker · Battery display<br/>Noise control tiles · EQ presets<br/>Settings page · Connect / Disconnect"]
         icon -- click --> popup
     end
 
@@ -217,10 +214,14 @@ socat - UNIX-CONNECT:$HOME/.cache/antiphase/daemon.sock
    - **Ambient slider** — Adjust ambient sound level (1–20)
    - **Focus on Voice** — Prioritize voice passthrough
    - **Equalizer** — Choose from 9 presets or use Manual
+   - **Settings (gear)** — Speak to Chat, Adaptive Volume, Auto Power-Off,
+     and the About section (model, firmware version, address); only rows the
+     connected model supports are shown
    - **Refresh** — Re-read current device state
    - **Turn Off** — Power off the headphones (MDR models; other protocols
      report "not supported" rather than guessing a frame)
-   - **Connect / Disconnect** — Manage the control link
+   - **Connect / Disconnect** — Manage the control link; idle devices also
+     get a **Connect** button directly on their list card
 
 ## Configuration
 
@@ -300,7 +301,11 @@ Available methods:
 | `set_equalizer_preset` | `{address, preset}` | Set EQ preset |
 | `set_equalizer_custom` | `{address, preset, bands}` | Write a custom 10-band curve |
 | `get_dsee` / `set_dsee` | `{address}` / `{address, enabled}` | Read / toggle DSEE |
+| `get_speak_to_chat` / `set_speak_to_chat` | `{address}` / `{address, enabled}` | Read / toggle Speak to Chat |
+| `get_adaptive_volume` / `set_adaptive_volume` | `{address}` / `{address, enabled}` | Read / toggle Adaptive Volume (V1/V2 models) |
+| `get_auto_power_off` / `set_auto_power_off` | `{address}` / `{address, index}` | Read / set Auto Power-Off (0=Off, 1/3/5/15/30 min) |
 | `refresh_info` | `{address}` | Get firmware version and codec |
+| `get_capabilities` | `{address}` | Raw MDR capability manifest (diagnostics) |
 | `get_state` | `{address}` | Cached snapshot from the state monitor (battery, noise mode, codec, DSEE) — no device round-trip |
 | `power_off` | `{address}` | Power off the device (MDR models; declines elsewhere) |
 | `raw_command` | `{address, payload, ...}` | Debug passthrough; **disabled unless the daemon runs with `--allow-raw`** |
@@ -349,8 +354,16 @@ MDR / COMMAND_1 variant (WH-1000XM6, verified against a live unit):
   custom preset is selected. **DSEE** `GET E6 01` → `E7 01 <v>`;
   `SET E8 01 <v>` → notify `E9` (booleans are inverted: `00` on, `01` off).
   **Codec** `GET 12 02` → `13 02 <c>` (`01` SBC, `02` AAC, `10` LDAC,
-  `20` aptX, `21` aptX HD, `30` LC3); `GET 12 00` returns a JSON blob with
-  model, firmware (`sVer`) and link quality.
+  `20` aptX, `21` aptX HD, `30` LC3); `GET 12 00` returns a JSON status
+  blob — the firmware version is `sVer` **nested in `dInfo`**, encoded
+  `0MAJMINPATCH` (`"0315"` is the public 3.1.5 firmware).
+  **Speak to Chat** `GET F6 0C` → `F7 0C <inv>`; `SET F8 0C <inv> 01`
+  (ACKed only; booleans inverted). **Auto Power-Off** `GET 26 05` →
+  `27 05 <c0> <c1>`; `SET 28 05 <c0> <c1>` — code pairs `11 00` Off,
+  `00 00` 1 min, `01 01` 3 min, `02 02` 5 min, `03 03` 15 min,
+  `10 00` 30 min. **Adaptive Volume** (`F6 0A`, the V2 sub) is *not*
+  answered on the XM6 — its caps manifest (`06 02`) has no `F7` response
+  opcode — so the Settings row is hidden there and shown on V2 models.
   **Adaptive Sound Control** (SENSE family) caps `GET 70 00` →
   `71 00 <count> <scene id>*` (`08` Focus, `10` Office, `20` Aware);
   `SET 78 00 <scene>` → notify `79 00 01`. The XM6 never answers the
@@ -358,8 +371,8 @@ MDR / COMMAND_1 variant (WH-1000XM6, verified against a live unit):
   changes nothing audible — like the official app, selecting a scene
   applies its noise-control combination via NCASM and mirrors the
   choice to the device. Scene definitions (name, mode, ambient level,
-  focus-on-voice) are user-editable in the flyout's **Scenes → Edit**
-  panel — scenes can be added (custom ids from `0x40`, capped at 6)
+  focus-on-voice) are user-editable in the flyout's **Adaptive Sound
+  Control → Edit** panel — scenes can be added (custom ids from `0x40`, capped at 6)
   and removed (− button per card, at least one must remain) — and
   persisted by the daemon in `~/.local/share/antiphase/scenes.json`;
   only the three stock ids are mirrored over SENSE. The active chip is

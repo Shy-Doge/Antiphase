@@ -13,6 +13,7 @@ building blocks (transport, protocols, BlueZ, controller, profiles).
 
 import os
 import errno
+import json
 import socket
 import struct
 import threading
@@ -238,10 +239,12 @@ DEVICE_PROFILES = {
         "dualBattery": False,
         "eq": True,
         "dsee": True,
-        "speakToChat": False,
+        "speakToChat": True,
+        # GET F6 0A is answered with nothing on the XM6 (probed live);
+        # the caps manifest has no 0xF7 response opcode either.
         "adaptiveVolume": False,
-        "autoPowerOff": False,
-        "firmware": False,
+        "autoPowerOff": True,
+        "firmware": True,
         "codec": True,
         "asc": True,
     },
@@ -1547,7 +1550,29 @@ class SonyProtocolMDR:
         return [(body[i], body[i + 1]) for i in range(0, len(body) - 1, 2)]
 
     def get_firmware(self) -> str:
-        raise ValueError("Firmware version is not exposed on this firmware")
+        """GET 12 00 -> RET 13 00 <json>: the status blob carries sVer.
+
+        Live XM6 reply: {"type":"CS","fVer":"BT22","dInfo":{"model":
+        "WH-1000XM6","sVer":"0315"},"btInfo":{...}} — sVer is nested in
+        dInfo and encodes the dotted version as 0MAJMINPATCH ("0315"
+        is the public 3.1.5 firmware).
+        """
+        resp = self._t.mdr_command(bytes([0x12, 0x00]), 0x13, 0x00, timeout=3.0)
+        text = bytes(resp[2:]).decode("utf-8", "replace")
+        start = text.find("{")
+        if start == -1:
+            raise ValueError("No JSON status blob in response")
+        data = json.loads(text[start:])
+        if isinstance(data, list):
+            data = next((d for d in data if isinstance(d, dict)), {})
+        dinfo = data.get("dInfo") if isinstance(data.get("dInfo"), dict) else {}
+        ver = dinfo.get("sVer") or data.get("sVer")
+        if not ver:
+            raise ValueError("Status blob has no firmware version")
+        ver = str(ver)
+        if ver.isdigit() and len(ver) >= 3:
+            ver = ".".join([str(int(ver[:2]))] + list(ver[2:]))
+        return ver
 
     def get_codec(self) -> str:
         """GET 12 02 -> RET 13 02 <codec> (01 SBC, 02 AAC, 10 LDAC, ...)."""
@@ -1573,6 +1598,55 @@ class SonyProtocolMDR:
         self._t.mdr_command(
             bytes([0xE8, 0x01, 0x00 if enabled else 0x01]), 0xE9, 0x01, timeout=3.0
         )
+
+    # ── Ambient/features family (F6/F7/F8, same subs as the V2 protocol) ──
+    # Reads are GET F6 <sub> -> RET F7 <sub> <inverted-enabled>; writes are
+    # fire-and-forget SET F8 (no notification is documented for these on
+    # the XM6, and mdr_write drains/ACKs whatever arrives).
+
+    def _get_inverted(self, sub: int) -> bool:
+        resp = self._t.mdr_command(bytes([0xF6, sub]), 0xF7, sub, timeout=3.0)
+        if len(resp) < 3:
+            raise ValueError("Incomplete response")
+        return resp[2] == 0x00  # Sony's inverted boolean
+
+    def get_speak_to_chat(self) -> bool:
+        return self._get_inverted(0x0C)
+
+    def set_speak_to_chat(self, enabled: bool):
+        self._t.mdr_write(bytes([0xF8, 0x0C, 0x00 if enabled else 0x01, 0x01]))
+
+    def get_adaptive_volume(self) -> bool:
+        return self._get_inverted(0x0A)
+
+    def set_adaptive_volume(self, enabled: bool):
+        self._t.mdr_write(bytes([0xF8, 0x0A, 0x00 if enabled else 0x01]))
+
+    # Auto Power Off: GET 26 05 -> RET 27 05 <c0> <c1>; SET 28 05 <c0> <c1>.
+    # Same code table as the V2 protocol (Off, 1, 3, 5, 15, 30 minutes).
+    AUTO_POWER_OFF_CODES = [
+        (0x11, 0x00),
+        (0x00, 0x00),
+        (0x01, 0x01),
+        (0x02, 0x02),
+        (0x03, 0x03),
+        (0x10, 0x00),
+    ]
+
+    def get_auto_power_off(self) -> int:
+        resp = self._t.mdr_command(bytes([0x26, 0x05]), 0x27, 0x05, timeout=3.0)
+        if len(resp) < 4:
+            raise ValueError("Incomplete auto power off response")
+        for i, (c0, c1) in enumerate(self.AUTO_POWER_OFF_CODES):
+            if resp[2] == c0 and resp[3] == c1:
+                return i
+        return 0
+
+    def set_auto_power_off(self, index: int):
+        if not 0 <= index < len(self.AUTO_POWER_OFF_CODES):
+            raise ValueError(f"Invalid auto power off index {index}")
+        c0, c1 = self.AUTO_POWER_OFF_CODES[index]
+        self._t.mdr_write(bytes([0x28, 0x05, c0, c1]))
 
 
 # Every IEEE OUI registered to a Sony entity (standards-oui.ieee.org,
@@ -2125,6 +2199,18 @@ class SonyDeviceController:
             return self._protocol.get_dsee()
         except Exception:
             return False
+
+    def get_capabilities(self):
+        """Raw MDR capability manifest (diagnostics; V1/V2 have none)."""
+        if not self._connected:
+            return {"error": "Not connected"}
+        if not hasattr(self._protocol, "get_capabilities"):
+            return {"error": "Capability query not supported on this protocol"}
+        try:
+            caps = self._protocol.get_capabilities()
+        except Exception as e:
+            return {"error": str(e)}
+        return {"capabilities": [[int(a), int(b)] for a, b in caps]}
 
     def set_speak_to_chat(self, enabled: bool):
         if not self._connected:

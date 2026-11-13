@@ -54,8 +54,14 @@ PlasmoidItem {
     property bool _focusOnVoice: false
     property int _eqPreset: 3
     property bool _hasEq: true
+    property bool _speakToChat: true
+    property bool _adaptiveVolume: false
+    property int _autoPowerOff: 5
     property string _firmware: "3.1.5"
     property string _codec: "LDAC"
+    property var _profile: ({protocol: "MDR", eq: true, dsee: true, asc: true,
+                              speakToChat: true, adaptiveVolume: false,
+                              autoPowerOff: true})
     function _request(m, p) {}
 
     fullRepresentation: FullRepresentation { plasmoidItem: root }

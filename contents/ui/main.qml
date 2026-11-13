@@ -25,6 +25,7 @@ PlasmoidItem {
     property bool _connecting: false
     property var _devices: []
     property string _selectedDevice: ""
+    property string _selectedPath: ""
     property string _deviceName: ""
     property string _modelName: ""
     property int _batteryPercent: -1   // -1 = unknown
@@ -43,25 +44,49 @@ PlasmoidItem {
     property int _batteryRight: -1
     property int _batteryCase: -1
     property bool _dsee: false
+    property bool _speakToChat: false
+    property bool _adaptiveVolume: false
+    property int _autoPowerOff: 0     // index into the AUTO_POWER_OFF table
     property var _profile: ({})       // capability flags from the daemon
     property string _view: "list"     // "list" | "detail"
-    // Auto-establish the control session at most once per shell session,
-    // so the tray battery appears without opening the popup — but an
-    // explicit user disconnect is never undone.
-    property bool _autoConnectTried: false
+    // Auto-establish the control session when a Bluetooth-connected Sony
+    // device appears, so the tray battery shows up without opening the
+    // popup. Attempts are tracked per address (a failed attempt is not
+    // retried until the device drops and reconnects), and an explicit
+    // user disconnect is never undone.
+    property var _autoConnectTried: ({})
+    property bool _userDismissed: false
 
     // Exactly one Bluetooth-connected Sony device: open the daemon session
     // silently (the popup stays on the device list).
     function _maybeAutoConnect(devices) {
-        if (root._autoConnectTried)
-            return
-        root._autoConnectTried = true
-        if (root._selectedDevice !== "" || root._connecting)
+        if (root._userDismissed || root._connecting)
             return
         var live = devices.filter(function (d) { return d.connected })
+        // Forget devices that dropped: their next connection may auto-connect.
+        for (var addr in root._autoConnectTried) {
+            if (!live.some(function (d) { return d.address === addr }))
+                delete root._autoConnectTried[addr]
+        }
+        if (root._selectedDevice !== "") {
+            // A dead session on the selected device: re-open it once the
+            // device is Bluetooth-connected again (the per-address attempt
+            // map keeps this from retry-storming).
+            if (!root._connected
+                    && !root._autoConnectTried[root._selectedDevice]
+                    && live.some(function (d) { return d.address === root._selectedDevice })) {
+                root._autoConnectTried[root._selectedDevice] = true
+                root._reconnect()
+            }
+            return
+        }
         if (live.length !== 1)
             return
+        if (root._autoConnectTried[live[0].address])
+            return
+        root._autoConnectTried[live[0].address] = true
         root._selectedDevice = live[0].address
+        root._selectedPath = live[0].path
         root._deviceName = live[0].name
         root._connecting = true
         root._request("connect_device", {
@@ -70,9 +95,30 @@ PlasmoidItem {
         })
     }
 
+    // (Re)open the Sony control session for the selected device. The
+    // daemon also brings the Bluetooth link up when it is down.
+    function _reconnect() {
+        if (root._selectedDevice === "" || root._connecting)
+            return
+        root._connecting = true
+        root._request("connect_device", {
+            address: root._selectedDevice,
+            device_path: root._selectedPath,
+            device_name: root._deviceName
+        })
+    }
+
     // Pick a device from the list: open its detail page and (re)establish
     // the Sony control session. The daemon reuses a live session as-is.
     function _selectDevice(address, path, name) {
+        // Re-entering the device whose session is already live (or still
+        // connecting): just show the detail page. Clearing state and
+        // re-connecting would flash "not connected / no battery" for the
+        // duration of the round-trip; the state poll keeps the page fresh.
+        if (address === root._selectedDevice && (root._connected || root._connecting)) {
+            root._view = "detail"
+            return
+        }
         // Drop stale state from any previously selected device so the
         // detail page never shows another headset's battery/EQ while the
         // new session is still connecting.
@@ -86,6 +132,7 @@ PlasmoidItem {
         root._codec = ""
         root._eqBands = []
         root._selectedDevice = address
+        root._selectedPath = path
         root._deviceName = name
         root._view = "detail"
         root._connecting = true
@@ -94,8 +141,24 @@ PlasmoidItem {
         })
     }
 
+    // Read the device-side settings shown on the settings page. Gated by
+    // the profile so unsupported reads (which time out) never run.
+    function _refreshSettings() {
+        if (!root._connected || !root._selectedDevice)
+            return
+        var p = root._profile || {}
+        var addr = root._selectedDevice
+        if (p.speakToChat)
+            root._request("get_speak_to_chat", {address: addr})
+        if (p.adaptiveVolume)
+            root._request("get_adaptive_volume", {address: addr})
+        if (p.autoPowerOff)
+            root._request("get_auto_power_off", {address: addr})
+    }
+
     function _disconnect() {
         root._request("disconnect_device", {address: root._selectedDevice})
+        root._userDismissed = true
         root._connected = false
         root._connecting = false
         root._batteryPercent = -1
@@ -190,9 +253,20 @@ PlasmoidItem {
             root._stateInFlight = false
             root._connected = false
             root._connecting = false
+            // The daemon may have restarted: release the device and forget
+            // the attempt so the probe re-establishes the session (a merely
+            // transient blip costs one idempotent connect_device, which the
+            // daemon answers from the still-live session).
+            delete root._autoConnectTried[root._selectedDevice]
+            root._selectedDevice = ""
+            root._deviceName = ""
+            if (root._view === "detail")
+                root._view = "list"
         } else if (req.method === "connect_device") {
             root._connecting = false
-            root._view = "list"
+            // Stay where we are: the detail page shows "Not connected"
+            // with a Connect button, and the probe retries automatically
+            // once the device re-appears as Bluetooth-connected.
         }
     }
 
@@ -254,7 +328,7 @@ PlasmoidItem {
             _log("rpc error: " + JSON.stringify(data.error))
             if (method === "connect_device") {
                 root._connecting = false
-                root._view = "list"
+                // Keep the selection: Connect button + probe can retry.
             }
             return
         }
@@ -270,6 +344,8 @@ PlasmoidItem {
             // A declined command falls through to the error branch below.
             root._connected = false
             root._connecting = false
+            root._selectedDevice = ""
+            root._deviceName = ""
             root._view = "list"
             return
         }
@@ -279,10 +355,18 @@ PlasmoidItem {
             return
         }
         if (result === null || result === undefined) return
+        // Settings reads answer with bare booleans/numbers — route them by
+        // method before the generic boolean (DSEE) fallback below.
+        if (method === "get_speak_to_chat") { root._speakToChat = result === true; return }
+        if (method === "get_adaptive_volume") { root._adaptiveVolume = result === true; return }
+        if (method === "get_auto_power_off") {
+            if (typeof result === "number")
+                root._autoPowerOff = result
+            return
+        }
         if (typeof result === "boolean") { root._dsee = result; return }
 
-        if (result.state === true) {
-            // Snapshot from the daemon's monitor: only the fields the
+        if (result.state === true) {            // Snapshot from the daemon's monitor: only the fields the
             // device can change on its own. Apply as a diff so absent
             // fields (unsupported reads) never clobber known state.
             if (result.battery !== undefined)
@@ -309,6 +393,10 @@ PlasmoidItem {
             if (result.error === "Not connected") {
                 root._connected = false
                 root._connecting = false
+                // Keep the page open: its Connect button (and the probe,
+                // once the device re-appears as Bluetooth-connected) can
+                // re-establish the session.
+                delete root._autoConnectTried[root._selectedDevice]
             }
             // The UI optimistically assumed the write succeeded; re-read
             // the affected section so it shows the device's real state.
@@ -317,7 +405,10 @@ PlasmoidItem {
                 set_asc_scene: "refresh_noise",
                 set_equalizer_preset: "refresh_equalizer",
                 set_equalizer_custom: "refresh_equalizer",
-                set_dsee: "get_dsee"
+                set_dsee: "get_dsee",
+                set_speak_to_chat: "get_speak_to_chat",
+                set_adaptive_volume: "get_adaptive_volume",
+                set_auto_power_off: "get_auto_power_off"
             }
             if (resync[method] && address)
                 root._request(resync[method], {address: address})
@@ -342,6 +433,7 @@ PlasmoidItem {
             root._request("refresh_info", {address: addr})
             root._request("get_dsee", {address: addr})
             root._request("get_scenes", {})
+            root._refreshSettings()
             return
         }
         if (result.main !== undefined) {

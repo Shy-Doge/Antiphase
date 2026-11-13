@@ -328,7 +328,7 @@ PlasmaExtras.Representation {
     ListView {
         id: deviceList
         anchors.fill: parent
-        visible: plasmoidItem._view !== "detail"
+        visible: plasmoidItem._view === "list"
         model: plasmoidItem._devices
         clip: true
         spacing: 10
@@ -349,6 +349,19 @@ PlasmaExtras.Representation {
                 color: cardMa.pressed ? Qt.alpha(Kirigami.Theme.textColor, 0.14)
                      : cardMa.containsMouse ? Qt.alpha(Kirigami.Theme.textColor, 0.10)
                      : Qt.alpha(Kirigami.Theme.textColor, 0.05)
+
+                // Declared before the content so the Connect button on the
+                // card receives its clicks; labels and images do not grab
+                // the mouse, so the rest of the card still falls through.
+                MouseArea {
+                    id: cardMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: plasmoidItem._selectDevice(modelData.address,
+                                                          modelData.path,
+                                                          modelData.name)
+                }
 
                 RowLayout {
                     anchors.fill: parent
@@ -418,23 +431,27 @@ PlasmaExtras.Representation {
                             spacing: 12
                         }
                     }
-                }
 
-                MouseArea {
-                    id: cardMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: plasmoidItem._selectDevice(modelData.address,
-                                                          modelData.path,
-                                                          modelData.name)
+                    // Explicit connect affordance for paired-but-idle
+                    // devices: the daemon brings the Bluetooth link up
+                    // and opens the Sony session in one step.
+                    PlasmaComponents3.Button {
+                        visible: !modelData.connected
+                        text: "Connect"
+                        highlighted: true
+                        font.pixelSize: 11
+                        Layout.preferredHeight: 30
+                        onClicked: plasmoidItem._selectDevice(modelData.address,
+                                                              modelData.path,
+                                                              modelData.name)
+                    }
                 }
             }
     }
 
     PlasmaComponents3.Label {
         anchors.centerIn: parent
-        visible: plasmoidItem._view !== "detail" && plasmoidItem._devices.length === 0
+        visible: plasmoidItem._view === "list" && plasmoidItem._devices.length === 0
         text: "No paired Bluetooth devices found"
         color: Kirigami.Theme.disabledTextColor
         font.pixelSize: 12
@@ -460,6 +477,17 @@ PlasmaExtras.Representation {
                 onClicked: plasmoidItem._view = "list"
             }
             Item { Layout.fillWidth: true }
+            PlasmaComponents3.ToolButton {
+                icon.name: "settings-configure-symbolic"
+                flat: true
+                PlasmaComponents3.ToolTip {
+                    text: "Device settings"
+                }
+                onClicked: {
+                    plasmoidItem._view = "settings"
+                    plasmoidItem._refreshSettings()
+                }
+            }
         }
 
         PlasmaComponents3.ScrollView {
@@ -817,7 +845,7 @@ PlasmaExtras.Representation {
                         RowLayout {
                             Layout.fillWidth: true
                             PlasmaComponents3.Label {
-                                text: "Scenes"
+                                text: "Adaptive Sound Control"
                                 font.pixelSize: 13
                                 font.bold: true
                             }
@@ -1244,6 +1272,15 @@ PlasmaExtras.Representation {
                         }
                     }
 
+                    // ── Firmware footer ─────────────────────────────────────
+                    PlasmaComponents3.Label {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: plasmoidItem._firmware !== ""
+                        text: "Firmware " + plasmoidItem._firmware
+                        font.pixelSize: 10
+                        color: Kirigami.Theme.disabledTextColor
+                    }
+
                     Item { Layout.preferredHeight: 6 }
                 }
             }
@@ -1260,9 +1297,22 @@ PlasmaExtras.Representation {
             Layout.bottomMargin: 2
 
             PlasmaComponents3.ToolButton {
+                icon.name: "network-bluetooth-active-symbolic"
+                text: "Connect"
+                flat: true
+                visible: !plasmoidItem._connected
+                enabled: !plasmoidItem._connecting
+                PlasmaComponents3.ToolTip {
+                    text: "Open the Sony control session (connects Bluetooth if needed)"
+                }
+                onClicked: plasmoidItem._reconnect()
+            }
+
+            PlasmaComponents3.ToolButton {
                 icon.name: "system-shutdown-symbolic"
                 text: "Turn off"
                 flat: true
+                visible: plasmoidItem._connected
                 onClicked: {
                     // The response handler leaves the detail view when
                     // the device actually powers off; a declined command
@@ -1294,10 +1344,250 @@ PlasmaExtras.Representation {
             PlasmaComponents3.ToolButton {
                 icon.name: "network-bluetooth-inactive-symbolic"
                 flat: true
+                visible: plasmoidItem._connected
                 PlasmaComponents3.ToolTip {
                     text: "Close the Sony control session (audio keeps working)"
                 }
                 onClicked: plasmoidItem._disconnect()
+            }
+        }
+    }
+
+    // ── Device settings view ─────────────────────────────────────────────────
+    // Device-side options that change rarely (the Sony app's equivalent
+    // lives under "Customize"). Every row is gated by the daemon's
+    // capability profile, so unsupported firmware simply shows nothing.
+    ColumnLayout {
+        anchors.fill: parent
+        visible: plasmoidItem._view === "settings"
+        spacing: 0
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 6
+            Layout.rightMargin: 6
+            Layout.topMargin: 4
+            Layout.preferredHeight: 36
+
+            PlasmaComponents3.ToolButton {
+                icon.name: "arrow-left-symbolic"
+                flat: true
+                onClicked: plasmoidItem._view = "detail"
+            }
+            PlasmaComponents3.Label {
+                text: "Settings"
+                font.pixelSize: 14
+                font.bold: true
+            }
+            Item { Layout.fillWidth: true }
+        }
+
+        PlasmaComponents3.ScrollView {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
+
+            contentItem: Flickable {
+                id: settingsFlick
+                contentWidth: width
+                contentHeight: settingsColumn.implicitHeight + 20
+                clip: true
+
+                ColumnLayout {
+                    id: settingsColumn
+                    width: settingsFlick.width
+                    spacing: 14
+
+                    // ── Sensing ─────────────────────────────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        spacing: 10
+                        visible: representation.hasFeature("speakToChat", false)
+                                 || representation.hasFeature("adaptiveVolume", false)
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        PlasmaComponents3.Label {
+                            text: "Sensing"
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            visible: representation.hasFeature("speakToChat", false)
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    text: "Speak to Chat"
+                                }
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    text: "Pause audio when you start speaking"
+                                    font.pixelSize: 10
+                                    color: Kirigami.Theme.disabledTextColor
+                                }
+                            }
+                            PlasmaComponents3.Switch {
+                                id: speakChatSwitch
+                                checked: plasmoidItem._speakToChat
+                                Binding {
+                                    target: speakChatSwitch
+                                    property: "checked"
+                                    value: plasmoidItem._speakToChat
+                                    when: !speakChatSwitch.down
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                onToggled: {
+                                    plasmoidItem._speakToChat = checked
+                                    plasmoidItem._request("set_speak_to_chat", {
+                                        address: plasmoidItem._selectedDevice,
+                                        enabled: checked
+                                    })
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+                            visible: representation.hasFeature("adaptiveVolume", false)
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    text: "Adaptive Volume"
+                                }
+                                PlasmaComponents3.Label {
+                                    Layout.fillWidth: true
+                                    text: "Adjust volume to your surroundings"
+                                    font.pixelSize: 10
+                                    color: Kirigami.Theme.disabledTextColor
+                                }
+                            }
+                            PlasmaComponents3.Switch {
+                                id: adaptiveVolSwitch
+                                checked: plasmoidItem._adaptiveVolume
+                                Binding {
+                                    target: adaptiveVolSwitch
+                                    property: "checked"
+                                    value: plasmoidItem._adaptiveVolume
+                                    when: !adaptiveVolSwitch.down
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                onToggled: {
+                                    plasmoidItem._adaptiveVolume = checked
+                                    plasmoidItem._request("set_adaptive_volume", {
+                                        address: plasmoidItem._selectedDevice,
+                                        enabled: checked
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Battery ─────────────────────────────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        spacing: 10
+                        visible: representation.hasFeature("autoPowerOff", false)
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        PlasmaComponents3.Label {
+                            text: "Battery"
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 10
+
+                            PlasmaComponents3.Label {
+                                Layout.fillWidth: true
+                                text: "Auto power off"
+                            }
+                            PlasmaComponents3.ComboBox {
+                                id: autoPowerOffCombo
+                                Layout.preferredWidth: 130
+                                wheelEnabled: false
+                                model: ["Off", "1 min", "3 min", "5 min", "15 min", "30 min"]
+                                currentIndex: plasmoidItem._autoPowerOff
+                                Binding {
+                                    target: autoPowerOffCombo
+                                    property: "currentIndex"
+                                    value: plasmoidItem._autoPowerOff
+                                    when: !autoPowerOffCombo.down
+                                    restoreMode: Binding.RestoreBindingOrValue
+                                }
+                                onActivated: function(index) {
+                                    plasmoidItem._autoPowerOff = index
+                                    plasmoidItem._request("set_auto_power_off", {
+                                        address: plasmoidItem._selectedDevice,
+                                        index: index
+                                    })
+                                }
+                            }
+                        }
+                    }
+
+                    // ── About ───────────────────────────────────────────────
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 14
+                        Layout.rightMargin: 14
+                        spacing: 4
+
+                        Kirigami.Separator { Layout.fillWidth: true }
+
+                        PlasmaComponents3.Label {
+                            text: "About"
+                            font.pixelSize: 13
+                            font.bold: true
+                        }
+
+                        Repeater {
+                            model: [
+                                { k: "Model",
+                                  v: plasmoidItem._modelName || plasmoidItem._deviceName || "—" },
+                                { k: "Firmware",
+                                  v: plasmoidItem._firmware !== "" ? plasmoidItem._firmware : "—" },
+                                { k: "Address",
+                                  v: plasmoidItem._selectedDevice !== ""
+                                     ? plasmoidItem._selectedDevice : "—" }
+                            ]
+
+                            delegate: RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+
+                                PlasmaComponents3.Label {
+                                    text: modelData.k
+                                    font.pixelSize: 11
+                                    color: Kirigami.Theme.disabledTextColor
+                                }
+                                Item { Layout.fillWidth: true }
+                                PlasmaComponents3.Label {
+                                    text: modelData.v
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+                    }
+
+                    Item { Layout.preferredHeight: 6 }
+                }
             }
         }
     }

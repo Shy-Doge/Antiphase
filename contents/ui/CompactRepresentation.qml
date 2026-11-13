@@ -63,8 +63,8 @@ Item {
         var bits = []
         if (plasmoidItem._codec)
             bits.push(plasmoidItem._codec)
-        // Noise mode as a short badge: Off / NC / Ambient Sound.
-        bits.push(["OFF", "NC", "AS"][plasmoidItem._noiseMode] || "OFF")
+        // Noise mode as a short badge: Off / ANC / Ambient Sound.
+        bits.push(["OFF", "ANC", "AS"][plasmoidItem._noiseMode] || "OFF")
         if (plasmoidItem._dsee)
             bits.push("DSEE")
         return bits.join(" · ")
@@ -253,6 +253,6 @@ Item {
         visible: false
         font.pixelSize: 9
         // Widest status the line can ever show.
-        text: "LDAC · NC · DSEE"
+        text: "LDAC · ANC · DSEE"
     }
 }
