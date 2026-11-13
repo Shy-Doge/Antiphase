@@ -159,7 +159,8 @@ try:
     total += check_file(
         "CompactRepresentation.qml", os.path.join(UI_DIR, "CompactRepresentation.qml")
     )
-    total += check_file("configGeneral.qml", os.path.join(UI_DIR, "configGeneral.qml"))
+    total += check_file("configTray.qml", os.path.join(UI_DIR, "configTray.qml"))
+    total += check_file("configPopup.qml", os.path.join(UI_DIR, "configPopup.qml"))
 
     # 2. Full instantiation test: PlasmoidItem + both representations with mock state
     total += create_test(

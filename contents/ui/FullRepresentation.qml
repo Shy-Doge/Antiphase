@@ -585,10 +585,13 @@ PlasmaExtras.Representation {
                         }
 
                         // Wide: product render left, info right — the same
-                        // arrangement as the wide taskbar layout.
+                        // arrangement as the wide taskbar layout. The row
+                        // sizes to its content and centers, so image and
+                        // text sit centered as a group (not image pinned
+                        // left with the text centered in the leftovers).
                         RowLayout {
                             id: headerRow
-                            anchors.fill: parent
+                            anchors.centerIn: parent
                             visible: representation.wideHeader
                             spacing: 18
 
@@ -618,12 +621,15 @@ PlasmaExtras.Representation {
                             }
 
                             ColumnLayout {
-                                Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
                                 spacing: 3
 
+                                // Content-sized (no fillWidth): the row's
+                                // centering keeps the whole block centered.
+                                // The name still elides on absurd widths.
                                 PlasmaComponents3.Label {
-                                    Layout.fillWidth: true
+                                    Layout.maximumWidth: representation.width - 230
+                                    horizontalAlignment: Text.AlignHCenter
                                     text: plasmoidItem._modelName || plasmoidItem._deviceName || "Sony Headphones"
                                     font.pixelSize: 17
                                     font.bold: true
@@ -631,7 +637,7 @@ PlasmaExtras.Representation {
                                 }
 
                                 PlasmaComponents3.Label {
-                                    Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter
                                     visible: !plasmoidItem._connected
                                     text: plasmoidItem._connecting ? "Connecting…" : "Not connected"
                                     color: Kirigami.Theme.disabledTextColor
@@ -639,6 +645,7 @@ PlasmaExtras.Representation {
                                 }
 
                                 BatteryBadges {
+                                    Layout.alignment: Qt.AlignHCenter
                                     plasmoidItem: representation.plasmoidItem
                                     dual: representation.hasFeature("dualBattery", false)
                                     singleIcon: representation.batteryIcon(
@@ -649,7 +656,7 @@ PlasmaExtras.Representation {
                                 }
 
                                 PlasmaComponents3.Label {
-                                    Layout.fillWidth: true
+                                    horizontalAlignment: Text.AlignHCenter
                                     visible: plasmoidItem._codec !== "" || plasmoidItem._dsee
                                     text: [plasmoidItem._codec,
                                            plasmoidItem._dsee ? "DSEE Extreme" : ""]

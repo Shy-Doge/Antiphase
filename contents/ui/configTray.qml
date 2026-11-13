@@ -6,6 +6,8 @@ import QtQuick.Layouts
 import org.kde.iconthemes as KIconThemes
 import org.kde.kirigami as Kirigami
 
+// Tray page: everything about the panel cell. The popup side lives in
+// configPopup.qml; contents/config/config.qml wires both into the dialog.
 // The config framework binds the cfg_* properties on this root object.
 // Kirigami.FormLayout exposes no margins of its own, so padding is applied
 // by anchoring it inside this Item with margins.
@@ -20,7 +22,6 @@ Item {
 
     // Provided by the Plasma config framework (bound to the KConfigXT keys).
     property string cfg_trayLayout: "auto"
-    property string cfg_detailLayout: "auto"
     property string cfg_icon: "auto"
     property string cfg_batteryDisplay: "text"
     property string cfg_batteryGlyphSide: "left"
@@ -178,37 +179,6 @@ Item {
                   + "space when the widget loads. The panel reserves the tray cell "
                   + "width at load, so an explicit choice changes the content at "
                   + "once but the cell width on the next panel reload."
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
-            color: Kirigami.Theme.disabledTextColor
-        }
-
-        QQC2.ComboBox {
-            id: detailCombo
-            Kirigami.FormData.label: "Detail header:"
-            Layout.fillWidth: true
-            model: [
-                { key: "auto", label: "Automatic (side by side when wide)" },
-                { key: "stacked", label: "Stacked — image on top, info below" },
-                { key: "side", label: "Side by side — image left, info right" }
-            ]
-            textRole: "label"
-            valueRole: "key"
-            Component.onCompleted: currentIndex = Math.max(0, indexOfValue(page.cfg_detailLayout))
-            onActivated: page.cfg_detailLayout = currentValue
-        }
-
-        QQC2.Label {
-            Layout.fillWidth: true
-            // Without a clamped preferred width the label reports its
-            // unwrapped text width as the layout hint, overflows the form
-            // and gets clipped by the dialog (the page is not stretched to
-            // the dialog width).
-            Layout.preferredWidth: 1
-            Layout.maximumWidth: form.width
-            wrapMode: Text.WordWrap
-            text: "Layout of the product image, name and battery at the top of the "
-                  + "popup. Automatic widens the popup on large screens; the other "
-                  + "two force it. Applies the next time the popup opens."
             font.pointSize: Kirigami.Theme.smallFont.pointSize
             color: Kirigami.Theme.disabledTextColor
         }

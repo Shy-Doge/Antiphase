@@ -225,8 +225,9 @@ socat - UNIX-CONNECT:$HOME/.cache/antiphase/daemon.sock
 
 ## Configuration
 
-Right-click the widget → **Configure** opens a General page with the
-tray's look and the battery readout:
+Right-click the widget → **Configure** opens a **Tray** page (panel cell:
+layout, icon, battery, piece order, text fonts) and a **Widget** page (the
+popup itself), alongside the standard Keyboard Shortcuts and About pages.
 
 | Setting | Options | Effect |
 |---|---|---|
@@ -262,7 +263,8 @@ antiphase/
 │       ├── FullRepresentation.qml    # Popup flyout
 │       ├── CompactRepresentation.qml # Tray cell (icon / compact / wide layouts)
 │       ├── BatteryBadges.qml         # Shared L/R/case badge row
-│       ├── configGeneral.qml         # General config page
+│       ├── configTray.qml            # Tray config page
+│       ├── configPopup.qml           # Widget (popup) config page
 │       ├── modelImages.js            # Shared model -> product-render table
 │       ├── images/                   # Bundled product renders (webp)
 │       └── preview.qml               # Standalone preview harness
