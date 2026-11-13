@@ -765,6 +765,26 @@ class DaemonRPCHandler:
         result.update(state)
         return result
 
+    def handle_get_all_states(self, params):
+        """Per-device snapshots for the tray tooltip.
+
+        One entry per live Sony session, served from the monitor's
+        cache (no device traffic): the tooltip renders every headset
+        at once without polling each address separately.
+        """
+        out = []
+        for address, ctrl in list(self._controllers.items()):
+            if not ctrl.connected:
+                continue
+            entry = {
+                "address": address,
+                "model": ctrl.model or "",
+                "name": ctrl._device_name or "",
+            }
+            entry.update(self._state.get(address) or {})
+            out.append(entry)
+        return out
+
     def handle_refresh_battery(self, params):
         address = params.get("address")
         ctrl = self._controllers.get(address)

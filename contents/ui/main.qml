@@ -48,6 +48,7 @@ PlasmoidItem {
     property bool _adaptiveVolume: false
     property int _autoPowerOff: 0     // index into the AUTO_POWER_OFF table
     property var _profile: ({})       // capability flags from the daemon
+    property var _allStates: []       // per-session snapshots (tooltip feed)
     property string _view: "list"     // "list" | "detail"
     // Auto-establish the control session when a Bluetooth-connected Sony
     // device appears, so the tray battery shows up without opening the
@@ -56,6 +57,59 @@ PlasmoidItem {
     // user disconnect is never undone.
     property var _autoConnectTried: ({})
     property bool _userDismissed: false
+
+    // ── Tray tooltip ─────────────────────────────────────────────────────────
+    // Hovering the tray cell lists every connected headset with its
+    // noise-control mode and battery. Detailed lines come from the
+    // daemon's per-session snapshots (get_all_states); Bluetooth-only
+    // devices — no Sony session, nothing to read — are named plainly.
+    readonly property var _modeNames: ["Off", "ANC", "Ambient"]
+    readonly property int _btOnlyCount: root._devices.filter(function (d) {
+        return d.connected && !root._allStates.some(function (s) {
+            return s.address === d.address
+        })
+    }).length
+    toolTipMainText: {
+        const n = root._allStates.length + root._btOnlyCount
+        if (n === 0)
+            return "Antiphase"
+        if (n === 1 && root._connected)
+            return root._modelName || root._deviceName || "Sony Headphones"
+        return "Antiphase — " + n + (n === 1 ? " device" : " devices")
+    }
+    toolTipSubText: {
+        const lines = []
+        for (const s of root._allStates) {
+            const label = (s.model && s.model !== "Unknown")
+                          ? s.model : (s.name || "Sony headphones")
+            const bits = []
+            if (s.address === root._selectedDevice && root._connected) {
+                // Local state is polled faster than the daemon cache.
+                if (root._codec !== "")
+                    bits.push(root._codec)
+                bits.push(root._modeNames[root._noiseMode] || "Off")
+                if (root._batteryPercent >= 0)
+                    bits.push(root._batteryPercent + "%"
+                              + (root._charging ? " (charging)" : ""))
+            } else {
+                if (s.codec)
+                    bits.push(s.codec)
+                bits.push(root._modeNames[s.mode] || "Off")
+                if (s.battery >= 0)
+                    bits.push(s.battery + "%"
+                              + (s.charging ? " (charging)" : ""))
+            }
+            lines.push(label + " · " + bits.join(" · "))
+        }
+        for (const d of root._devices) {
+            if (d.connected && !root._allStates.some(function (s) {
+                    return s.address === d.address
+                }))
+                lines.push(d.name + " · connected")
+        }
+        return lines.length === 0 ? "No headphones connected"
+                                  : lines.join("<br/>")
+    }
 
     // Exactly one Bluetooth-connected Sony device: open the daemon session
     // silently (the popup stays on the device list).
@@ -310,6 +364,18 @@ PlasmoidItem {
         onTriggered: root._request("list_devices", {})
     }
 
+    // Tray tooltip feed: snapshots of every open Sony session, served
+    // from the daemon's monitor cache. Always on — with no sessions the
+    // reply is simply empty and the tooltip falls back to the device
+    // list; connect/disconnect transitions land within one cycle.
+    Timer {
+        interval: 10000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root._request("get_all_states", {})
+    }
+
     // ── Response handler ─────────────────────────────────────────────────────
     function _handleResponse(data) {
         if (!data) return
@@ -347,6 +413,10 @@ PlasmoidItem {
             root._selectedDevice = ""
             root._deviceName = ""
             root._view = "list"
+            return
+        }
+        if (method === "get_all_states") {
+            root._allStates = Array.isArray(result) ? result : []
             return
         }
         if (Array.isArray(result)) {
