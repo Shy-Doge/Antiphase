@@ -38,8 +38,40 @@
             <default></default>
         </entry>
         <entry name="batteryFontSize" type="Int">
-            <label>Font size (px) for the tray battery text; 0 = automatic.</label>
+            <label>Font size (pt) for the tray battery text; 0 = automatic.</label>
             <default>0</default>
+        </entry>
+        <entry name="nameFont" type="String">
+            <label>Font family for the tray device-name text; empty = system default.</label>
+            <default></default>
+        </entry>
+        <entry name="nameFontSize" type="Int">
+            <label>Font size (pt) for the tray device-name text; 0 = automatic.</label>
+            <default>0</default>
+        </entry>
+        <entry name="statusFont" type="String">
+            <label>Font family for the tray status (codec/mode) text; empty = system default.</label>
+            <default></default>
+        </entry>
+        <entry name="statusFontSize" type="Int">
+            <label>Font size (pt) for the tray status (codec/mode) text; 0 = automatic.</label>
+            <default>0</default>
+        </entry>
+        <entry name="batteryColor" type="String">
+            <label>Colour for the tray battery text; empty = theme default.</label>
+            <default></default>
+        </entry>
+        <entry name="nameColor" type="String">
+            <label>Colour for the tray device-name text; empty = theme default.</label>
+            <default></default>
+        </entry>
+        <entry name="statusColor" type="String">
+            <label>Colour for the tray status (codec/mode) text; empty = theme default.</label>
+            <default></default>
+        </entry>
+        <entry name="infoStatusTop" type="Bool">
+            <label>Stack the wide tray info cell with the status line above the device name.</label>
+            <default>false</default>
         </entry>
     </group>
 </kcfg>

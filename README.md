@@ -236,7 +236,8 @@ tray's look and the battery readout:
 | **Battery display** | `text` / `icon` / `both` | Percentage text, battery glyph (fill tracks the level, charging variant included), or both together — with a pick for which side the glyph sits on. |
 | **Battery placement** | checkbox | Optionally badge the battery on the headset icon's corner — costs no extra panel width and also works in the icon-only layout. |
 | **Tray pieces** | drag & drop | Drag the chips (headset icon, name & status, battery) to arrange the tray pieces left to right; applies live. |
-| **Battery font / size** | any installed family; `0`–32 px | Typography of the battery text; empty family and size `0` keep the panel defaults. Applies live. |
+| **Text fonts** | native dialogs | Pick colour (swatch button), font and size for each tray text piece — battery, device name, status line — from the platform dialogs; a reset arrow restores the panel defaults. Applies live. |
+| **Info lines** | checkbox | Swap the wide tray cell's stack: status line (`AAC · ANC`) above the device name instead of below. |
 
 ## Development
 

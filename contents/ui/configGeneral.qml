@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 import org.kde.iconthemes as KIconThemes
@@ -27,10 +28,71 @@ Item {
     property string cfg_trayOrder: "icon,info,battery"
     property string cfg_batteryFont: ""
     property int cfg_batteryFontSize: 0
+    property string cfg_nameFont: ""
+    property int cfg_nameFontSize: 0
+    property string cfg_statusFont: ""
+    property int cfg_statusFontSize: 0
+    property string cfg_batteryColor: ""
+    property string cfg_nameColor: ""
+    property string cfg_statusColor: ""
+    property bool cfg_infoStatusTop: false
+
+    // ── Per-role font pickers (native font dialog) ───────────────────────────
+    function fontFamily(role) {
+        if (role === "battery") return cfg_batteryFont
+        return role === "name" ? cfg_nameFont : cfg_statusFont
+    }
+    function fontSize(role) {
+        if (role === "battery") return cfg_batteryFontSize
+        return role === "name" ? cfg_nameFontSize : cfg_statusFontSize
+    }
+    function fontSummary(role) {
+        const f = fontFamily(role)
+        const s = fontSize(role)
+        if (f === "" && s <= 0)
+            return "System default"
+        return (f === "" ? "Panel font" : f) + (s > 0 ? "  " + s : "")
+    }
+    function fontColor(role) {
+        if (role === "battery") return cfg_batteryColor
+        return role === "name" ? cfg_nameColor : cfg_statusColor
+    }
+    function fontCustomised(role) {
+        return fontFamily(role) !== "" || fontSize(role) > 0
+               || fontColor(role) !== ""
+    }
+    function openFontDialog(role) {
+        fontDialog.role = role
+        // Qt6 FontDialog: the writable initial font is "selectedFont"
+        // (assigning "font" fails and aborts before open()).
+        fontDialog.selectedFont = Qt.font({
+            family: fontFamily(role) === ""
+                    ? Kirigami.Theme.defaultFont.family : fontFamily(role),
+            pointSize: fontSize(role) > 0
+                       ? fontSize(role) : Kirigami.Theme.defaultFont.pointSize
+        })
+        fontDialog.open()
+    }
+    function resetFont(role) {
+        if (role === "battery") {
+            cfg_batteryFont = ""; cfg_batteryFontSize = 0; cfg_batteryColor = ""
+        } else if (role === "name") {
+            cfg_nameFont = ""; cfg_nameFontSize = 0; cfg_nameColor = ""
+        } else {
+            cfg_statusFont = ""; cfg_statusFontSize = 0; cfg_statusColor = ""
+        }
+    }
+    function openColorDialog(role) {
+        colorDialog.role = role
+        colorDialog.selectedColor = fontColor(role) !== ""
+                                    ? fontColor(role)
+                                    : Kirigami.Theme.textColor
+        colorDialog.open()
+    }
 
     // ── Tray pieces: drag-to-reorder model ───────────────────────────────────
     readonly property var pieceLabels: ({
-        icon: "Headset icon", info: "Name & status", battery: "Battery"
+        icon: "Device icon", info: "Name & status", battery: "Battery"
     })
     ListModel { id: orderModel }
 
@@ -105,6 +167,12 @@ Item {
 
         QQC2.Label {
             Layout.fillWidth: true
+            // Without a clamped preferred width the label reports its
+            // unwrapped text width as the layout hint, overflows the form
+            // and gets clipped by the dialog (the page is not stretched to
+            // the dialog width).
+            Layout.preferredWidth: 1
+            Layout.maximumWidth: form.width
             wrapMode: Text.WordWrap
             text: "Automatic picks the widest tray layout that fits the free panel "
                   + "space when the widget loads. The panel reserves the tray cell "
@@ -131,6 +199,12 @@ Item {
 
         QQC2.Label {
             Layout.fillWidth: true
+            // Without a clamped preferred width the label reports its
+            // unwrapped text width as the layout hint, overflows the form
+            // and gets clipped by the dialog (the page is not stretched to
+            // the dialog width).
+            Layout.preferredWidth: 1
+            Layout.maximumWidth: form.width
             wrapMode: Text.WordWrap
             text: "Layout of the product image, name and battery at the top of the "
                   + "popup. Automatic widens the popup on large screens; the other "
@@ -253,6 +327,13 @@ Item {
             onToggled: page.cfg_batteryOverlay = checked
         }
 
+        QQC2.CheckBox {
+            Kirigami.FormData.label: "Info lines:"
+            text: "Status line above the device name"
+            checked: page.cfg_infoStatusTop
+            onToggled: page.cfg_infoStatusTop = checked
+        }
+
         // Drag the chips to arrange the tray pieces left to right.
         RowLayout {
             Kirigami.FormData.label: "Tray pieces:"
@@ -331,6 +412,12 @@ Item {
 
         QQC2.Label {
             Layout.fillWidth: true
+            // Without a clamped preferred width the label reports its
+            // unwrapped text width as the layout hint, overflows the form
+            // and gets clipped by the dialog (the page is not stretched to
+            // the dialog width).
+            Layout.preferredWidth: 1
+            Layout.maximumWidth: form.width
             wrapMode: Text.WordWrap
             text: "Drag the chips to arrange the tray pieces left to right "
                   + "(Name & status only shows in the wide layout). The "
@@ -343,34 +430,87 @@ Item {
             color: Kirigami.Theme.disabledTextColor
         }
 
-        QQC2.TextField {
-            id: fontField
-            Kirigami.FormData.label: "Battery font:"
-            Layout.fillWidth: true
-            placeholderText: "System default"
-            text: page.cfg_batteryFont
-            onEditingFinished: page.cfg_batteryFont = text.trim()
-        }
+        // ── Text fonts: native font dialog per tray text role ────────────────
+        Repeater {
+            model: [
+                { role: "battery", label: "Battery font:" },
+                { role: "name", label: "Name font:" },
+                { role: "status", label: "Status font:" }
+            ]
 
-        QQC2.SpinBox {
-            Kirigami.FormData.label: "Battery font size:"
-            from: 0
-            to: 32
-            value: page.cfg_batteryFontSize
-            onValueModified: page.cfg_batteryFontSize = value
-            QQC2.ToolTip {
-                text: "Pixel size for the battery text; 0 keeps the panel default"
-                visible: parent.hovered
-                delay: Kirigami.Units.toolTipDelay
+            delegate: RowLayout {
+                required property var modelData
+                Kirigami.FormData.label: modelData.label
+                spacing: Kirigami.Units.smallSpacing
+
+                // Colour swatch opening the native colour dialog.
+                QQC2.Button {
+                    Layout.preferredWidth: 34
+                    Layout.preferredHeight: 30
+                    onClicked: page.openColorDialog(modelData.role)
+                    contentItem: Rectangle {
+                        radius: 4
+                        border.width: 1
+                        border.color: Kirigami.Theme.disabledTextColor
+                        // No custom colour: show the theme text colour with
+                        // a diagonal slash to mark "default".
+                        color: page.fontColor(modelData.role) !== ""
+                               ? page.fontColor(modelData.role)
+                               : Kirigami.Theme.textColor
+                        Canvas {
+                            anchors.fill: parent
+                            visible: page.fontColor(modelData.role) === ""
+                            // Repaint whenever the custom colour toggles.
+                            property bool custom: page.fontColor(modelData.role) !== ""
+                            onCustomChanged: requestPaint()
+                            onPaint: {
+                                const c = getContext("2d")
+                                c.clearRect(0, 0, width, height)
+                                c.strokeStyle = Kirigami.Theme.disabledTextColor
+                                c.lineWidth = 1
+                                c.moveTo(2, height - 3)
+                                c.lineTo(width - 3, 2)
+                                c.stroke()
+                            }
+                        }
+                    }
+                    QQC2.ToolTip {
+                        text: "Text colour"
+                        visible: parent.hovered
+                        delay: Kirigami.Units.toolTipDelay
+                    }
+                }
+                QQC2.Button {
+                    text: page.fontSummary(modelData.role)
+                    onClicked: page.openFontDialog(modelData.role)
+                }
+                QQC2.ToolButton {
+                    icon.name: "edit-undo-symbolic"
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    visible: page.fontCustomised(modelData.role)
+                    QQC2.ToolTip {
+                        text: "Reset to the panel default"
+                        visible: parent.hovered
+                        delay: Kirigami.Units.toolTipDelay
+                    }
+                    onClicked: page.resetFont(modelData.role)
+                }
             }
         }
 
         QQC2.Label {
             Layout.fillWidth: true
+            // Without a clamped preferred width the label reports its
+            // unwrapped text width as the layout hint, overflows the form
+            // and gets clipped by the dialog (the page is not stretched to
+            // the dialog width).
+            Layout.preferredWidth: 1
+            Layout.maximumWidth: form.width
             wrapMode: Text.WordWrap
-            text: "Font family and size apply to the battery text (any font "
-                  + "installed on the system; leave the family empty for the "
-                  + "panel default). Applies live to the tray cell."
+            text: "Pick colour, font and size for each piece of tray text "
+                  + "using the native dialogs; the reset arrow restores the "
+                  + "panel defaults. Applies live to the tray cell."
             font.pointSize: Kirigami.Theme.smallFont.pointSize
             color: Kirigami.Theme.disabledTextColor
         }
@@ -382,6 +522,41 @@ Item {
         onIconNameChanged: {
             if (iconName)
                 page.cfg_icon = iconName
+        }
+    }
+
+    FontDialog {
+        id: fontDialog
+        title: "Choose Font"
+        property string role: ""
+        onAccepted: {
+            if (role === "battery") {
+                page.cfg_batteryFont = selectedFont.family
+                page.cfg_batteryFontSize = Math.round(selectedFont.pointSize)
+            } else if (role === "name") {
+                page.cfg_nameFont = selectedFont.family
+                page.cfg_nameFontSize = Math.round(selectedFont.pointSize)
+            } else {
+                page.cfg_statusFont = selectedFont.family
+                page.cfg_statusFontSize = Math.round(selectedFont.pointSize)
+            }
+        }
+    }
+
+    ColorDialog {
+        id: colorDialog
+        title: "Choose Text Colour"
+        options: ColorDialog.NoAlpha
+        property string role: ""
+        onAccepted: {
+            // Store plain hex so the KConfig value stays portable.
+            const hex = selectedColor.toString()
+            if (role === "battery")
+                page.cfg_batteryColor = hex
+            else if (role === "name")
+                page.cfg_nameColor = hex
+            else
+                page.cfg_statusColor = hex
         }
     }
 }

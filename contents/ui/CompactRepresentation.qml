@@ -45,14 +45,34 @@ Item {
         Plasmoid.configuration.batteryGlyphSide === "right"
     readonly property bool batteryOverlay:
         Plasmoid.configuration.batteryOverlay === true
+    // Per-role typography: empty family / size 0 keep the panel defaults.
+    // Sizes are points (what the font dialog reports).
     readonly property string batteryFontFamily: {
         const f = Plasmoid.configuration.batteryFont
         f && f !== "" ? f : Kirigami.Theme.defaultFont.family
     }
-    readonly property int batteryPixelSize: {
-        const s = Plasmoid.configuration.batteryFontSize
-        s > 0 ? s : Kirigami.Theme.defaultFont.pixelSize
+    readonly property int batteryPointSize:
+        Plasmoid.configuration.batteryFontSize || 0
+    readonly property string nameFontFamily: {
+        const f = Plasmoid.configuration.nameFont
+        f && f !== "" ? f : Kirigami.Theme.defaultFont.family
     }
+    readonly property int namePointSize:
+        Plasmoid.configuration.nameFontSize || 0
+    readonly property string statusFontFamily: {
+        const f = Plasmoid.configuration.statusFont
+        f && f !== "" ? f : Kirigami.Theme.defaultFont.family
+    }
+    readonly property int statusPointSize:
+        Plasmoid.configuration.statusFontSize || 0
+
+    // Per-role text colours; empty keeps the theme colour.
+    readonly property string batteryColor: Plasmoid.configuration.batteryColor || ""
+    readonly property string nameColor: Plasmoid.configuration.nameColor || ""
+    readonly property string statusColor: Plasmoid.configuration.statusColor || ""
+
+    // Stack order of the wide info cell: status above the name or below.
+    readonly property bool statusOnTop: Plasmoid.configuration.infoStatusTop === true
     // "auto" is resolved to a concrete layout once, at load (the panel
     // reads a preferredWidth only at first layout). An explicit choice in
     // the config stays live because resolvedMode remains a binding.
@@ -282,26 +302,39 @@ Item {
         }
     }
 
-    // Device name + codec/mode/DSEE status (wide layout only).
+    // Device name + codec/mode/DSEE status (wide layout only). A
+    // single-column GridLayout with explicit rows so the two lines can
+    // swap places (infoStatusTop).
     Component {
         id: infoCell
-        ColumnLayout {
+        GridLayout {
+            columns: 1
+            rowSpacing: 0
             Layout.fillHeight: true
             Layout.maximumWidth: root.nameWidth
-            spacing: 0
 
             PlasmaComponents3.Label {
+                Layout.row: root.statusOnTop ? 1 : 0
                 Layout.fillWidth: true
                 text: root.deviceLabel
+                font.family: root.nameFontFamily
+                // pointSize -1 clears the override and falls back to pixelSize.
+                font.pointSize: root.namePointSize > 0 ? root.namePointSize : -1
                 font.pixelSize: 12
                 font.bold: true
+                color: root.nameColor !== "" ? root.nameColor
+                                             : Kirigami.Theme.textColor
                 elide: Text.ElideRight
             }
             PlasmaComponents3.Label {
+                Layout.row: root.statusOnTop ? 0 : 1
                 Layout.fillWidth: true
                 text: root.statusLine
+                font.family: root.statusFontFamily
+                font.pointSize: root.statusPointSize > 0 ? root.statusPointSize : -1
                 font.pixelSize: 9
-                color: Kirigami.Theme.disabledTextColor
+                color: root.statusColor !== "" ? root.statusColor
+                                               : Kirigami.Theme.disabledTextColor
                 elide: Text.ElideRight
             }
         }
@@ -338,8 +371,12 @@ Item {
                                        : (root.isWide ? "—" : "")
                 font.bold: true
                 font.family: root.batteryFontFamily
-                font.pixelSize: root.batteryPixelSize
-                color: plasmoidItem._batteryPercent <= 20 && root.showPercent
+                font.pointSize: root.batteryPointSize > 0
+                                ? root.batteryPointSize
+                                : Kirigami.Theme.defaultFont.pointSize
+                // Custom colour wins; otherwise low battery turns red.
+                color: root.batteryColor !== "" ? root.batteryColor
+                       : plasmoidItem._batteryPercent <= 20 && root.showPercent
                        ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
             }
         }
@@ -351,12 +388,16 @@ Item {
         visible: false
         font.bold: true
         font.family: root.batteryFontFamily
-        font.pixelSize: root.batteryPixelSize
+        font.pointSize: root.batteryPointSize > 0
+                        ? root.batteryPointSize
+                        : Kirigami.Theme.defaultFont.pointSize
         text: "100%"
     }
     PlasmaComponents3.Label {
         id: nameMetric
         visible: false
+        font.family: root.nameFontFamily
+        font.pointSize: root.namePointSize > 0 ? root.namePointSize : -1
         font.pixelSize: 12
         font.bold: true
         // Tracks the live label; at load this is the "Sony Headphones"
@@ -367,6 +408,8 @@ Item {
     PlasmaComponents3.Label {
         id: statusMetric
         visible: false
+        font.family: root.statusFontFamily
+        font.pointSize: root.statusPointSize > 0 ? root.statusPointSize : -1
         font.pixelSize: 9
         // Widest status the line can ever show.
         text: "LDAC · ANC · DSEE"
