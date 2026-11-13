@@ -833,6 +833,7 @@ PlasmaExtras.Representation {
 
                     // ── Scenes (Adaptive Sound Control) ─────────────────────
                     ColumnLayout {
+                        id: ascSection
                         Layout.fillWidth: true
                         Layout.leftMargin: 14
                         Layout.rightMargin: 14
@@ -895,6 +896,7 @@ PlasmaExtras.Representation {
 
                         // Scene editor
                         ColumnLayout {
+                            id: sceneEditor
                             Layout.fillWidth: true
                             spacing: 10
                             visible: representation._scenesEditing
@@ -931,6 +933,11 @@ PlasmaExtras.Representation {
                                             anchors.margins: 10
                                             spacing: 6
 
+                                            // Row 1: icon | name | voice
+                                            // toggle | remove. The toggle is
+                                            // icon-only (tooltip) so the row
+                                            // fits the narrow popup; a
+                                            // labelled variant overflowed it.
                                             RowLayout {
                                                 Layout.fillWidth: true
                                                 spacing: 8
@@ -941,48 +948,39 @@ PlasmaExtras.Representation {
                                                     source: representation._sceneModeIcons[mode]
                                                 }
 
-                                                ColumnLayout {
+                                                PlasmaComponents3.TextField {
+                                                    id: sceneNameField
                                                     Layout.fillWidth: true
-                                                    spacing: 2
-                                                    PlasmaComponents3.Label {
-                                                        text: "Name"
-                                                        font.pixelSize: 10
-                                                        color: Kirigami.Theme.disabledTextColor
+                                                    Layout.minimumWidth: 60
+                                                    Layout.preferredHeight: 30
+                                                    text: name
+                                                    font.pixelSize: 11
+                                                    // Re-sync from the draft
+                                                    // only while unfocused, so
+                                                    // unrelated edits cannot
+                                                    // clobber mid-typing text.
+                                                    Binding {
+                                                        target: sceneNameField
+                                                        property: "text"
+                                                        value: name
+                                                        when: !sceneNameField.activeFocus
+                                                        restoreMode: Binding.RestoreBindingOrValue
                                                     }
-                                                    PlasmaComponents3.TextField {
-                                                        id: sceneNameField
-                                                        Layout.fillWidth: true
-                                                        text: name
-                                                        font.pixelSize: 11
-                                                        // Re-sync from the draft
-                                                        // only while unfocused, so
-                                                        // unrelated edits cannot
-                                                        // clobber mid-typing text.
-                                                        Binding {
-                                                            target: sceneNameField
-                                                            property: "text"
-                                                            value: name
-                                                            when: !sceneNameField.activeFocus
-                                                            restoreMode: Binding.RestoreBindingOrValue
-                                                        }
-                                                        onEditingFinished: representation.updateSceneField(
-                                                            index, "name", text)
-                                                    }
+                                                    onEditingFinished: representation.updateSceneField(
+                                                        index, "name", text)
                                                 }
 
-                                                ColumnLayout {
-                                                    spacing: 2
-                                                    PlasmaComponents3.Label {
+                                                // Focus on voice (draft only
+                                                // until Save)
+                                                PlasmaComponents3.Switch {
+                                                    id: sceneVoiceSwitch
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    checked: focusVoice
+                                                    PlasmaComponents3.ToolTip {
                                                         text: "Focus on voice"
-                                                        font.pixelSize: 10
-                                                        color: Kirigami.Theme.disabledTextColor
                                                     }
-                                                    PlasmaComponents3.Switch {
-                                                        Layout.alignment: Qt.AlignHCenter
-                                                        checked: focusVoice
-                                                        onToggled: representation.updateSceneField(
-                                                            index, "focusOnVoice", checked)
-                                                    }
+                                                    onToggled: representation.updateSceneField(
+                                                        index, "focusOnVoice", checked)
                                                 }
 
                                                 // Remove this scene (draft
@@ -1001,8 +999,12 @@ PlasmaExtras.Representation {
                                                 }
                                             }
 
-                                            RowLayout {
+                                            // Row 2: noise-control mode,
+                                            // label stacked above so the
+                                            // combo gets the full card width.
+                                            ColumnLayout {
                                                 Layout.fillWidth: true
+                                                spacing: 2
                                                 PlasmaComponents3.Label {
                                                     text: "Noise control"
                                                     font.pixelSize: 10
@@ -1027,53 +1029,58 @@ PlasmaExtras.Representation {
                                                     }
                                                 }
                                             }
-                                        }
-                                    }
 
-                                    // Ambient level lives under the card, like
-                                    // the official editor.
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        Layout.leftMargin: 4
-                                        Layout.rightMargin: 4
-                                        spacing: 0
-                                        visible: mode === 2
+                                            // Ambient level, inside the card
+                                            // of its scene (ambient modes).
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+                                                visible: mode === 2
 
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            PlasmaComponents3.Label {
-                                                text: "Ambient sound level"
-                                                font.pixelSize: 11
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    PlasmaComponents3.Label {
+                                                        text: "Ambient sound level"
+                                                        font.pixelSize: 11
+                                                    }
+                                                    Item { Layout.fillWidth: true }
+                                                    PlasmaComponents3.Label {
+                                                        text: level
+                                                        font.pixelSize: 11
+                                                    }
+                                                }
+                                                PlasmaComponents3.Slider {
+                                                    id: sceneLevelSlider
+                                                    Layout.fillWidth: true
+                                                    from: 1
+                                                    to: 20
+                                                    stepSize: 1
+                                                    value: level
+                                                    Binding {
+                                                        target: sceneLevelSlider
+                                                        property: "value"
+                                                        value: level
+                                                        when: !sceneLevelSlider.pressed
+                                                        restoreMode: Binding.RestoreBindingOrValue
+                                                    }
+                                                    onMoved: representation.updateSceneField(
+                                                        index, "ambientLevel", Math.round(value))
+                                                }
                                             }
-                                            Item { Layout.fillWidth: true }
-                                            PlasmaComponents3.Label {
-                                                text: level
-                                                font.pixelSize: 11
-                                            }
-                                        }
-                                        PlasmaComponents3.Slider {
-                                            id: sceneLevelSlider
-                                            Layout.fillWidth: true
-                                            from: 1
-                                            to: 20
-                                            stepSize: 1
-                                            value: level
-                                            Binding {
-                                                target: sceneLevelSlider
-                                                property: "value"
-                                                value: level
-                                                when: !sceneLevelSlider.pressed
-                                                restoreMode: Binding.RestoreBindingOrValue
-                                            }
-                                            onMoved: representation.updateSceneField(
-                                                index, "ambientLevel", Math.round(value))
                                         }
                                     }
                                 }
                             }
 
-                            RowLayout {
+                            // Flow, not RowLayout: the three buttons' text
+                            // gives the row a ~300px minimum width, which a
+                            // RowLayout could never shrink below — it forced
+                            // the whole editor wider than the popup and slid
+                            // the cards under the scrollbar. Flow's minimum
+                            // is the widest button and wraps instead.
+                            Flow {
                                 Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
                                 PlasmaComponents3.Button {
                                     text: "Add scene"
                                     font.pixelSize: 11
@@ -1081,7 +1088,6 @@ PlasmaExtras.Representation {
                                              < representation.maxScenes
                                     onClicked: representation.addScene()
                                 }
-                                Item { Layout.fillWidth: true }
                                 PlasmaComponents3.Button {
                                     text: "Reset to defaults"
                                     font.pixelSize: 11
@@ -1383,6 +1389,7 @@ PlasmaExtras.Representation {
         }
 
         PlasmaComponents3.ScrollView {
+            id: settingsScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
