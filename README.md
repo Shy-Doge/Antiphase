@@ -233,8 +233,9 @@ tray's look and the battery readout:
 | **Tray layout** | `auto` / `icon` / `compact` / `wide` | The panel cell: bare icon, icon + battery %, or product image + name + mode + battery. `auto` picks the widest that fits the free panel space. The tray is measured once at load, so a change applies after the panel reloads. |
 | **Detail header** | `auto` / `stacked` / `side` | The top of the popup: product image with name/battery below (`stacked`), beside it (`side`), or chosen from the popup width (`auto`, which widens the popup on large screens). Applies the next time the popup opens. |
 | **Tray icon** | preset glyphs / product image / custom / `auto` | The panel icon. Pick one of the built-in headset/headphone glyphs, the product render of the connected headphones, any icon from the system theme via the icon dialog, or `auto` for the default symbolic headset. |
-| **Battery display** | `text` / `icon` | The battery as percentage text or as a battery glyph (fill tracks the level, charging variant included). |
-| **Battery position** | `right` / `left` / `overlay` | Battery beside the icon (either side) or as a small badge on the icon's bottom-right corner — the overlay costs no extra panel width and also works in the icon-only layout. |
+| **Battery display** | `text` / `icon` / `both` | Percentage text, battery glyph (fill tracks the level, charging variant included), or both together — with a pick for which side the glyph sits on. |
+| **Battery placement** | checkbox | Optionally badge the battery on the headset icon's corner — costs no extra panel width and also works in the icon-only layout. |
+| **Tray pieces** | drag & drop | Drag the chips (headset icon, name & status, battery) to arrange the tray pieces left to right; applies live. |
 | **Battery font / size** | any installed family; `0`–32 px | Typography of the battery text; empty family and size `0` keep the panel defaults. Applies live. |
 
 ## Development

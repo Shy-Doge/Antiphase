@@ -18,12 +18,20 @@
             <default>auto</default>
         </entry>
         <entry name="batteryDisplay" type="String">
-            <label>Tray battery: "text" (percentage) or "icon" (battery glyph).</label>
+            <label>Tray battery: "text", "icon" or "both".</label>
             <default>text</default>
         </entry>
-        <entry name="batteryPosition" type="String">
-            <label>Battery placement: "right", "left" or "overlay" (badge on the icon).</label>
-            <default>right</default>
+        <entry name="batteryGlyphSide" type="String">
+            <label>With batteryDisplay "both": which side the glyph sits ("left" or "right").</label>
+            <default>left</default>
+        </entry>
+        <entry name="batteryOverlay" type="Bool">
+            <label>Badge the battery on the headset icon instead of beside it.</label>
+            <default>false</default>
+        </entry>
+        <entry name="trayOrder" type="String">
+            <label>Left-to-right order of the tray pieces: comma list of icon, info, battery.</label>
+            <default>icon,info,battery</default>
         </entry>
         <entry name="batteryFont" type="String">
             <label>Font family for the tray battery text; empty = system default.</label>

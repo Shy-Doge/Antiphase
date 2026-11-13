@@ -39,10 +39,12 @@ Item {
     readonly property string cfgMode: Plasmoid.configuration.trayLayout
     readonly property string batteryDisplay:
         Plasmoid.configuration.batteryDisplay || "text"
-    readonly property string batteryPosition:
-        Plasmoid.configuration.batteryPosition || "right"
     readonly property bool batteryAsIcon: batteryDisplay === "icon"
-    readonly property bool batteryOverlay: batteryPosition === "overlay"
+    readonly property bool batteryBoth: batteryDisplay === "both"
+    readonly property bool batteryGlyphRight:
+        Plasmoid.configuration.batteryGlyphSide === "right"
+    readonly property bool batteryOverlay:
+        Plasmoid.configuration.batteryOverlay === true
     readonly property string batteryFontFamily: {
         const f = Plasmoid.configuration.batteryFont
         f && f !== "" ? f : Kirigami.Theme.defaultFont.family
@@ -59,6 +61,23 @@ Item {
         ? (autoResolved !== "" ? autoResolved : "compact")
         : cfgMode
     readonly property bool isWide: resolvedMode === "wide"
+
+    // Left-to-right tray pieces, user-reorderable by dragging chips in the
+    // config page ("icon,info,battery"). Pieces pack tightly in the chosen
+    // order; unknown or missing tokens fall back to defaults.
+    readonly property var trayTokens: {
+        const raw = String(Plasmoid.configuration.trayOrder || "").split(",")
+        const known = ["icon", "info", "battery"]
+        const out = []
+        for (const t of raw) {
+            const k = t.trim()
+            if (known.includes(k) && !out.includes(k))
+                out.push(k)
+        }
+        if (!out.includes("icon"))
+            out.unshift("icon")
+        return out
+    }
 
     // The panel assigns the icon size as this item's height; fall back to
     // the medium icon size before that first assignment lands.
@@ -77,8 +96,12 @@ Item {
     }
     readonly property int glyphWidth: Math.round(iconSize * 0.85)
     // Width the battery occupies inline (0 when it rides on the icon).
-    readonly property int batteryInlineWidth: batteryAsIcon
-                                              ? glyphWidth : batteryMetric.implicitWidth
+    readonly property int batteryInlineWidth: {
+        const text = batteryMetric.implicitWidth
+        if (batteryBoth)
+            return glyphWidth + 2 + text
+        return batteryAsIcon ? glyphWidth : text
+    }
 
     // ── Product render (shared table in modelImages.js) ─────────────────────
     readonly property string deviceLabel:
@@ -194,19 +217,41 @@ Item {
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
 
-        // Battery, left of the icon (compact rows with position=left)
-        Loader {
-            active: !root.isWide && root.resolvedMode !== "icon"
-                    && !root.batteryOverlay && root.batteryPosition === "left"
-            sourceComponent: batteryCell
-            Layout.alignment: Qt.AlignVCenter
-        }
+        Repeater {
+            model: root.trayTokens
 
-        // Product render (wide) or icon (icon / compact)
+            delegate: Loader {
+                id: piece
+                required property var modelData
+
+                Layout.alignment: Qt.AlignVCenter
+                // The Loader is the layout child: fill/max-width must live
+                // here, not on the loaded item (whose Layout properties the
+                // RowLayout never sees).
+                Layout.fillWidth: piece.modelData === "spacer"
+                Layout.maximumWidth: piece.modelData === "info"
+                                     ? root.nameWidth : Number.MAX_VALUE
+                active: piece.modelData === "icon" ? true
+                        : piece.modelData === "info" ? root.isWide
+                        : piece.modelData === "battery"
+                          ? root.resolvedMode !== "icon" && !root.batteryOverlay
+                          : root.isWide   // spacer
+                sourceComponent: piece.modelData === "icon" ? iconCell
+                             : piece.modelData === "info" ? infoCell
+                             : piece.modelData === "battery" ? batteryCell
+                             : spacerCell
+            }
+        }
+    }
+
+    // Headset icon / product render, with the optional battery badge.
+    // Sized through implicitWidth/Height: inside a Loader those, not
+    // Layout.preferred*, are what the RowLayout ends up seeing.
+    Component {
+        id: iconCell
         Item {
-            Layout.preferredWidth: root.isWide ? root.imageWidth : root.iconSize
-            Layout.preferredHeight: root.iconSize
-            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: root.isWide ? root.imageWidth : root.iconSize
+            implicitHeight: root.iconSize
 
             Image {
                 id: trayImage
@@ -235,10 +280,12 @@ Item {
                 anchors.bottom: parent.bottom
             }
         }
+    }
 
-        // Name + status (wide only)
+    // Device name + codec/mode/DSEE status (wide layout only).
+    Component {
+        id: infoCell
         ColumnLayout {
-            visible: root.isWide
             Layout.fillHeight: true
             Layout.maximumWidth: root.nameWidth
             spacing: 0
@@ -258,33 +305,34 @@ Item {
                 elide: Text.ElideRight
             }
         }
+    }
 
+    Component {
+        id: spacerCell
         Item {
-            visible: root.isWide
             Layout.fillWidth: true
             Layout.preferredWidth: 0
         }
-
-        // Battery, right of the icon (compact) or at the cell's end (wide)
-        Loader {
-            active: root.resolvedMode !== "icon" && !root.batteryOverlay
-                    && (root.isWide || root.batteryPosition !== "left")
-            sourceComponent: batteryCell
-            Layout.alignment: Qt.AlignVCenter
-        }
     }
 
-    // Battery readout: percentage text or battery glyph, per the config.
+    // Battery readout: percentage text, battery glyph, or both — the
+    // layoutDirection flips the glyph to the other side of the text.
     Component {
         id: batteryCell
-        Item {
-            implicitWidth: root.batteryAsIcon ? root.glyphWidth
-                                              : batteryText.implicitWidth
-            implicitHeight: root.iconSize
+        RowLayout {
+            spacing: 2
+            layoutDirection: root.batteryGlyphRight ? Qt.RightToLeft
+                                                    : Qt.LeftToRight
 
+            Kirigami.Icon {
+                visible: root.batteryAsIcon || root.batteryBoth
+                source: root.batteryGlyph
+                Layout.preferredWidth: root.glyphWidth
+                Layout.preferredHeight: root.glyphWidth
+                Layout.alignment: Qt.AlignVCenter
+            }
             PlasmaComponents3.Label {
                 id: batteryText
-                anchors.centerIn: parent
                 visible: !root.batteryAsIcon
                 text: root.showPercent ? plasmoidItem._batteryPercent + "%"
                                        : (root.isWide ? "—" : "")
@@ -293,13 +341,6 @@ Item {
                 font.pixelSize: root.batteryPixelSize
                 color: plasmoidItem._batteryPercent <= 20 && root.showPercent
                        ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
-            }
-            Kirigami.Icon {
-                anchors.centerIn: parent
-                visible: root.batteryAsIcon && root.batteryGlyph !== ""
-                source: root.batteryGlyph
-                width: root.glyphWidth
-                height: root.glyphWidth
             }
         }
     }
