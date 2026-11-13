@@ -37,6 +37,20 @@ Item {
                                         && plasmoidItem._batteryPercent >= 0
 
     readonly property string cfgMode: Plasmoid.configuration.trayLayout
+    readonly property string batteryDisplay:
+        Plasmoid.configuration.batteryDisplay || "text"
+    readonly property string batteryPosition:
+        Plasmoid.configuration.batteryPosition || "right"
+    readonly property bool batteryAsIcon: batteryDisplay === "icon"
+    readonly property bool batteryOverlay: batteryPosition === "overlay"
+    readonly property string batteryFontFamily: {
+        const f = Plasmoid.configuration.batteryFont
+        f && f !== "" ? f : Kirigami.Theme.defaultFont.family
+    }
+    readonly property int batteryPixelSize: {
+        const s = Plasmoid.configuration.batteryFontSize
+        s > 0 ? s : Kirigami.Theme.defaultFont.pixelSize
+    }
     // "auto" is resolved to a concrete layout once, at load (the panel
     // reads a preferredWidth only at first layout). An explicit choice in
     // the config stays live because resolvedMode remains a binding.
@@ -51,6 +65,20 @@ Item {
     readonly property int iconSize: height > 0 ? Math.round(height)
                                                : Kirigami.Units.iconSizes.medium
     readonly property int imageWidth: Math.round(iconSize * 1.5)
+
+    // Battery glyph (icon display mode / overlay badge).
+    readonly property string batteryGlyph: {
+        if (plasmoidItem._batteryPercent < 0)
+            return ""
+        const lvl = Math.max(0, Math.min(100,
+                          Math.round(plasmoidItem._batteryPercent / 10) * 10))
+        return "battery-" + ("00" + lvl).slice(-3)
+             + (plasmoidItem._charging ? "-charging-symbolic" : "-symbolic")
+    }
+    readonly property int glyphWidth: Math.round(iconSize * 0.85)
+    // Width the battery occupies inline (0 when it rides on the icon).
+    readonly property int batteryInlineWidth: batteryAsIcon
+                                              ? glyphWidth : batteryMetric.implicitWidth
 
     // ── Product render (shared table in modelImages.js) ─────────────────────
     readonly property string deviceLabel:
@@ -84,9 +112,9 @@ Item {
             return iconSize
         case "wide":
             return imageWidth + row.spacing + nameWidth
-                 + row.spacing + batteryMetric.implicitWidth + Kirigami.Units.smallSpacing
+                 + row.spacing + batteryInlineWidth + Kirigami.Units.smallSpacing
         default: // compact
-            return iconSize + row.spacing + batteryMetric.implicitWidth
+            return iconSize + row.spacing + batteryInlineWidth
         }
     }
 
@@ -142,9 +170,9 @@ Item {
             return icon
         case "wide":
             return Math.round(icon * 1.5) + gap + nameWidth + gap
-                 + batteryMetric.implicitWidth + gap
+                 + batteryInlineWidth + gap
         default:
-            return icon + gap + batteryMetric.implicitWidth
+            return icon + gap + batteryInlineWidth
         }
     }
 
@@ -165,6 +193,14 @@ Item {
         id: row
         anchors.fill: parent
         spacing: Kirigami.Units.smallSpacing
+
+        // Battery, left of the icon (compact rows with position=left)
+        Loader {
+            active: !root.isWide && root.resolvedMode !== "icon"
+                    && !root.batteryOverlay && root.batteryPosition === "left"
+            sourceComponent: batteryCell
+            Layout.alignment: Qt.AlignVCenter
+        }
 
         // Product render (wide) or icon (icon / compact)
         Item {
@@ -187,6 +223,16 @@ Item {
                 // failed — the wide cell must never go blank.
                 visible: !root.isWide || trayImage.status !== Image.Ready
                 source: Plasmoid.icon
+            }
+            // Overlay badge: the battery rides on the icon's corner, so it
+            // costs no extra panel width (works in every layout).
+            Kirigami.Icon {
+                visible: root.batteryOverlay && root.batteryGlyph !== ""
+                source: root.batteryGlyph
+                width: Math.round(root.iconSize * 0.55)
+                height: width
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
             }
         }
 
@@ -219,15 +265,42 @@ Item {
             Layout.preferredWidth: 0
         }
 
-        // Battery percentage (compact / wide)
-        PlasmaComponents3.Label {
-            visible: root.resolvedMode !== "icon"
+        // Battery, right of the icon (compact) or at the cell's end (wide)
+        Loader {
+            active: root.resolvedMode !== "icon" && !root.batteryOverlay
+                    && (root.isWide || root.batteryPosition !== "left")
+            sourceComponent: batteryCell
             Layout.alignment: Qt.AlignVCenter
-            text: root.showPercent ? plasmoidItem._batteryPercent + "%"
-                                   : (root.isWide ? "—" : "")
-            font.bold: true
-            color: plasmoidItem._batteryPercent <= 20 && root.showPercent
-                   ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+        }
+    }
+
+    // Battery readout: percentage text or battery glyph, per the config.
+    Component {
+        id: batteryCell
+        Item {
+            implicitWidth: root.batteryAsIcon ? root.glyphWidth
+                                              : batteryText.implicitWidth
+            implicitHeight: root.iconSize
+
+            PlasmaComponents3.Label {
+                id: batteryText
+                anchors.centerIn: parent
+                visible: !root.batteryAsIcon
+                text: root.showPercent ? plasmoidItem._batteryPercent + "%"
+                                       : (root.isWide ? "—" : "")
+                font.bold: true
+                font.family: root.batteryFontFamily
+                font.pixelSize: root.batteryPixelSize
+                color: plasmoidItem._batteryPercent <= 20 && root.showPercent
+                       ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+            }
+            Kirigami.Icon {
+                anchors.centerIn: parent
+                visible: root.batteryAsIcon && root.batteryGlyph !== ""
+                source: root.batteryGlyph
+                width: root.glyphWidth
+                height: root.glyphWidth
+            }
         }
     }
 
@@ -236,6 +309,8 @@ Item {
         id: batteryMetric
         visible: false
         font.bold: true
+        font.family: root.batteryFontFamily
+        font.pixelSize: root.batteryPixelSize
         text: "100%"
     }
     PlasmaComponents3.Label {

@@ -19,6 +19,10 @@ Item {
     property string cfg_trayLayout: "auto"
     property string cfg_detailLayout: "auto"
     property string cfg_icon: "auto"
+    property string cfg_batteryDisplay: "text"
+    property string cfg_batteryPosition: "right"
+    property string cfg_batteryFont: ""
+    property int cfg_batteryFontSize: 0
 
     // Curated headset glyphs from the icon theme; anything else the user
     // picks through the icon dialog counts as "custom".
@@ -168,6 +172,76 @@ Item {
                     delay: Kirigami.Units.toolTipDelay
                 }
             }
+        }
+
+        // ── Battery readout ──────────────────────────────────────────────────
+        QQC2.ComboBox {
+            Kirigami.FormData.label: "Battery display:"
+            model: [
+                { key: "text", label: "Percentage text (78%)" },
+                { key: "icon", label: "Battery icon" }
+            ]
+            textRole: "label"
+            valueRole: "key"
+            Component.onCompleted: currentIndex = Math.max(0, indexOfValue(page.cfg_batteryDisplay))
+            onActivated: page.cfg_batteryDisplay = currentValue
+        }
+
+        QQC2.ComboBox {
+            Kirigami.FormData.label: "Battery position:"
+            model: [
+                { key: "right", label: "Right of the icon" },
+                { key: "left", label: "Left of the icon" },
+                { key: "overlay", label: "Overlay badge on the icon" }
+            ]
+            textRole: "label"
+            valueRole: "key"
+            Component.onCompleted: currentIndex = Math.max(0, indexOfValue(page.cfg_batteryPosition))
+            onActivated: page.cfg_batteryPosition = currentValue
+        }
+
+        QQC2.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: "The overlay badge rides on the headset icon's bottom-right corner, "
+                  + "so it costs no extra panel width and also works in the "
+                  + "icon-only layout. The panel reserves the tray cell width at "
+                  + "load, so display and position changes resize the cell on the "
+                  + "next panel reload."
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            color: Kirigami.Theme.disabledTextColor
+        }
+
+        QQC2.TextField {
+            id: fontField
+            Kirigami.FormData.label: "Battery font:"
+            Layout.fillWidth: true
+            placeholderText: "System default"
+            text: page.cfg_batteryFont
+            onEditingFinished: page.cfg_batteryFont = text.trim()
+        }
+
+        QQC2.SpinBox {
+            Kirigami.FormData.label: "Battery font size:"
+            from: 0
+            to: 32
+            value: page.cfg_batteryFontSize
+            onValueModified: page.cfg_batteryFontSize = value
+            QQC2.ToolTip {
+                text: "Pixel size for the battery text; 0 keeps the panel default"
+                visible: parent.hovered
+                delay: Kirigami.Units.toolTipDelay
+            }
+        }
+
+        QQC2.Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: "Font family and size apply to the battery text (any font "
+                  + "installed on the system; leave the family empty for the "
+                  + "panel default). Applies live to the tray cell."
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            color: Kirigami.Theme.disabledTextColor
         }
     }   // Kirigami.FormLayout
     }   // ScrollView

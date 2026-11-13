@@ -17,5 +17,21 @@
             <label>Tray icon name, or "auto" for the built-in headset icon.</label>
             <default>auto</default>
         </entry>
+        <entry name="batteryDisplay" type="String">
+            <label>Tray battery: "text" (percentage) or "icon" (battery glyph).</label>
+            <default>text</default>
+        </entry>
+        <entry name="batteryPosition" type="String">
+            <label>Battery placement: "right", "left" or "overlay" (badge on the icon).</label>
+            <default>right</default>
+        </entry>
+        <entry name="batteryFont" type="String">
+            <label>Font family for the tray battery text; empty = system default.</label>
+            <default></default>
+        </entry>
+        <entry name="batteryFontSize" type="Int">
+            <label>Font size (px) for the tray battery text; 0 = automatic.</label>
+            <default>0</default>
+        </entry>
     </group>
 </kcfg>

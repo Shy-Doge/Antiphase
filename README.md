@@ -225,14 +225,17 @@ socat - UNIX-CONNECT:$HOME/.cache/antiphase/daemon.sock
 
 ## Configuration
 
-Right-click the widget → **Configure** opens a General page with three
-settings:
+Right-click the widget → **Configure** opens a General page with the
+tray's look and the battery readout:
 
 | Setting | Options | Effect |
 |---|---|---|
 | **Tray layout** | `auto` / `icon` / `compact` / `wide` | The panel cell: bare icon, icon + battery %, or product image + name + mode + battery. `auto` picks the widest that fits the free panel space. The tray is measured once at load, so a change applies after the panel reloads. |
 | **Detail header** | `auto` / `stacked` / `side` | The top of the popup: product image with name/battery below (`stacked`), beside it (`side`), or chosen from the popup width (`auto`, which widens the popup on large screens). Applies the next time the popup opens. |
 | **Tray icon** | preset glyphs / product image / custom / `auto` | The panel icon. Pick one of the built-in headset/headphone glyphs, the product render of the connected headphones, any icon from the system theme via the icon dialog, or `auto` for the default symbolic headset. |
+| **Battery display** | `text` / `icon` | The battery as percentage text or as a battery glyph (fill tracks the level, charging variant included). |
+| **Battery position** | `right` / `left` / `overlay` | Battery beside the icon (either side) or as a small badge on the icon's bottom-right corner — the overlay costs no extra panel width and also works in the icon-only layout. |
+| **Battery font / size** | any installed family; `0`–32 px | Typography of the battery text; empty family and size `0` keep the panel defaults. Applies live. |
 
 ## Development
 
